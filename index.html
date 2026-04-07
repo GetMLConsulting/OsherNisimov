@@ -146,18 +146,18 @@ function filterData(rows){
   const g=k=>f.reduce((a,r)=>a+(parseFloat(r[k])||0),0);
 
   // ── DM columns
-  const dmCash     = g("DM Cash Collected");
+  const dmCash     = g("Total DM Cash Collected (Today)");
   const dmCalls    = g("DM Calls Booked");
-  const dmQual     = g("DM Calls Booked (Qualified)");
-  const dmCalendar = g("DM Calls On Calendar");
-  const dmShows    = g("DM Calls Showed Up");
-  const dmCloses   = g("DM Calls Closed");
+  const dmQual     = g("DM Qualified Calls Booked");
+  const dmCalendar = g("DM Calls On Calendar (Today)");
+  const dmShows    = g("DM Calls That Showed Up (Today)");
+  const dmCloses   = g("Total Amount Closed (DMs)");
   const dmPitched  = g("DM Calls Pitched");
 
   // ── Typeform columns
   const tfCash     = g("Typeform Cash Collected");
-  const tfCalls    = g("Typeform Calls Booked");
-  const tfQual     = g("Typeform Calls Booked (Qualified)");
+  const tfCalls    = g("Typeform Calls Booked (Today)");
+  const tfQual     = g("Typeform Qualified Calls Booked");
   const tfCalendar = g("Typeform Calls On Calendar");
   const tfShows    = g("Typeform Calls Showed Up");
   const tfCloses   = g("Typeform Calls Closed");
@@ -174,19 +174,19 @@ function filterData(rows){
       tfCash:0, tfCalls:0, tfShows:0
     };
     // combined for overview chart
-    bd[sortKey].cash    += (parseFloat(r["DM Cash Collected"])||0)    + (parseFloat(r["Typeform Cash Collected"])||0);
-    bd[sortKey].closes  += (parseFloat(r["DM Calls Closed"])||0)      + (parseFloat(r["Typeform Calls Closed"])||0);
-    bd[sortKey].shows   += (parseFloat(r["DM Calls Showed Up"])||0)   + (parseFloat(r["Typeform Calls Showed Up"])||0);
+    bd[sortKey].cash    += (parseFloat(r["Total DM Cash Collected (Today)"])||0) + (parseFloat(r["Typeform Cash Collected"])||0);
+    bd[sortKey].closes  += (parseFloat(r["Total Amount Closed (DMs)"])||0)       + (parseFloat(r["Typeform Calls Closed"])||0);
+    bd[sortKey].shows   += (parseFloat(r["DM Calls That Showed Up (Today)"])||0) + (parseFloat(r["Typeform Calls Showed Up"])||0);
     // DM chart
-    bd[sortKey].dmCash    += parseFloat(r["DM Cash Collected"])||0;
+    bd[sortKey].dmCash    += parseFloat(r["Total DM Cash Collected (Today)"])||0;
     bd[sortKey].dmCalls   += parseFloat(r["DM Calls Booked"])||0;
-    bd[sortKey].dmShows   += parseFloat(r["DM Calls Showed Up"])||0;
+    bd[sortKey].dmShows   += parseFloat(r["DM Calls That Showed Up (Today)"])||0;
     bd[sortKey].dmPitched += parseFloat(r["DM Calls Pitched"])||0;
     bd[sortKey].outbounds += parseFloat(r["Outbound Messages Sent"])||0;
     bd[sortKey].dmConvos  += parseFloat(r["Total Conversations Had"])||0;
     // Typeform chart
     bd[sortKey].tfCash    += parseFloat(r["Typeform Cash Collected"])||0;
-    bd[sortKey].tfCalls   += parseFloat(r["Typeform Calls Booked"])||0;
+    bd[sortKey].tfCalls   += parseFloat(r["Typeform Calls Booked (Today)"])||0;
     bd[sortKey].tfShows   += parseFloat(r["Typeform Calls Showed Up"])||0;
   });
 
