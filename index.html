@@ -57,6 +57,7 @@ html,body{height:100%;overflow:hidden;background:#060606;font-family:-apple-syst
 .picker-dropdown{position:absolute;right:0;top:calc(100% + 6px);background:#0a0a0a;border:1px solid #1e1e1e;border-radius:12px;padding:14px;z-index:999;display:flex;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,0.9)}
 .preset-btn{background:none;border:none;color:#888;text-align:left;padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;white-space:nowrap;width:100%}
 .preset-btn.active{background:#1e1e1e;color:#F97316;font-weight:700}
+
 </style>
 </head>
 <body>
@@ -114,7 +115,7 @@ let chart=null;
 function getSlug(){return window.location.pathname.replace(/\//g,"").toLowerCase()||"client";}
 function getClient(){return CLIENTS.find(c=>c.slug===getSlug())||CLIENTS[0];}
 
-// ── DATE PARSING (YYYY-MM-DD only, no timezone issues) ──
+// ── DATE PARSING ──────────────────────────────────────
 function parseFormattedDate(str) {
   if (!str) return null;
   const parts = String(str).trim().split("-");
@@ -130,7 +131,7 @@ function parseFormattedDate(str) {
   return isNaN(fallback) ? null : fallback;
 }
 
-// ── CSV FILTERING (uses Date Formatted column ONLY) ────
+// ── CSV FILTERING ─────────────────────────────────────
 function filterData(rows){
   const s=S.start, e=S.end||S.start;
   const s0=new Date(s.getFullYear(),s.getMonth(),s.getDate());
@@ -144,46 +145,78 @@ function filterData(rows){
 
   const g=k=>f.reduce((a,r)=>a+(parseFloat(r[k])||0),0);
 
+  // ── DM columns
+  const dmCash     = g("DM Cash Collected");
+  const dmCalls    = g("DM Calls Booked");
+  const dmQual     = g("DM Calls Booked (Qualified)");
+  const dmCalendar = g("DM Calls On Calendar");
+  const dmShows    = g("DM Calls Showed Up");
+  const dmCloses   = g("DM Calls Closed");
+  const dmPitched  = g("DM Calls Pitched");
+
+  // ── Typeform columns
+  const tfCash     = g("Typeform Cash Collected");
+  const tfCalls    = g("Typeform Calls Booked");
+  const tfQual     = g("Typeform Calls Booked (Qualified)");
+  const tfCalendar = g("Typeform Calls On Calendar");
+  const tfShows    = g("Typeform Calls Showed Up");
+  const tfCloses   = g("Typeform Calls Closed");
+
   const bd={};
   f.forEach(r=>{
     const d = parseFormattedDate(r[dateKey]);
     if(!d) return;
     const sortKey = r[dateKey];
     const lbl=SM[d.getMonth()]+" "+d.getDate();
-    if(!bd[sortKey])bd[sortKey]={sortKey:sortKey, label:lbl, cash:0, calls:0, closes:0, outbounds:0, convos:0, pitched:0, shows:0};
-    bd[sortKey].cash+=parseFloat(r["Total Cash Collected (Today)"])||0;
-    bd[sortKey].calls+=parseFloat(r["Calls Booked"])||0;
-    bd[sortKey].closes+=parseFloat(r["Total Amount Closed"])||0;
-    bd[sortKey].outbounds+=parseFloat(r["Outbound Messages Sent"])||0;
-    bd[sortKey].convos+=parseFloat(r["Total Conversations Had"])||0;
-    bd[sortKey].pitched+=parseFloat(r["Calls Pitched"])||0;
-    bd[sortKey].shows+=parseFloat(r["Calls That Showed Up (Today)"])||0;
+    if(!bd[sortKey])bd[sortKey]={sortKey:sortKey, label:lbl,
+      cash:0, closes:0, shows:0,
+      dmCash:0, dmCalls:0, dmShows:0, dmPitched:0, dmConvos:0, outbounds:0,
+      tfCash:0, tfCalls:0, tfShows:0
+    };
+    // combined for overview chart
+    bd[sortKey].cash    += (parseFloat(r["DM Cash Collected"])||0)    + (parseFloat(r["Typeform Cash Collected"])||0);
+    bd[sortKey].closes  += (parseFloat(r["DM Calls Closed"])||0)      + (parseFloat(r["Typeform Calls Closed"])||0);
+    bd[sortKey].shows   += (parseFloat(r["DM Calls Showed Up"])||0)   + (parseFloat(r["Typeform Calls Showed Up"])||0);
+    // DM chart
+    bd[sortKey].dmCash    += parseFloat(r["DM Cash Collected"])||0;
+    bd[sortKey].dmCalls   += parseFloat(r["DM Calls Booked"])||0;
+    bd[sortKey].dmShows   += parseFloat(r["DM Calls Showed Up"])||0;
+    bd[sortKey].dmPitched += parseFloat(r["DM Calls Pitched"])||0;
+    bd[sortKey].outbounds += parseFloat(r["Outbound Messages Sent"])||0;
+    bd[sortKey].dmConvos  += parseFloat(r["Total Conversations Had"])||0;
+    // Typeform chart
+    bd[sortKey].tfCash    += parseFloat(r["Typeform Cash Collected"])||0;
+    bd[sortKey].tfCalls   += parseFloat(r["Typeform Calls Booked"])||0;
+    bd[sortKey].tfShows   += parseFloat(r["Typeform Calls Showed Up"])||0;
   });
 
   const chartData = Object.values(bd).sort((a,b) => a.sortKey.localeCompare(b.sortKey));
 
   return {
     totals:{
-      cash:g("Total Cash Collected (Today)"),
-      calls:g("Calls Booked"),
-      closes:g("Total Amount Closed"),
-      shows:g("Calls That Showed Up (Today)"),
-      calendar:g("Calls On Calendar (Today)"),
+      // combined (Overview)
+      cash:     dmCash + tfCash,
+      closes:   dmCloses + tfCloses,
+      shows:    dmShows + tfShows,
+      calendar: dmCalendar + tfCalendar,
+      // DM
+      dmCash, dmCalls, dmQual, dmCalendar, dmShows, dmCloses, dmPitched,
+      // Typeform
+      tfCash, tfCalls, tfQual, tfCalendar, tfShows, tfCloses,
+      // Activity (DM outreach)
       outbounds:g("Outbound Messages Sent"),
-      convos:g("Total Conversations Had"),
+      convos:   g("Total Conversations Had"),
       followups:g("Follow-Ups"),
-      hours:g("Hours Worked"),
-      pitched:g("Calls Pitched"),
-      inbounds:g("Inbound Conversations"),
-      qualified:g("Qualified Calls Booked")
+      hours:    g("Hours Worked"),
+      inbounds: g("Inbound Conversations"),
     },
     chartData: chartData
   };
 }
 
 // ── COMPONENTS ─────────────────────────────────────────
-function card(label,value,sub){
-  return `<div class="card"><div class="ca"></div><div class="card-label">${label}</div><div class="card-value">${value}</div>${sub?`<div class="card-sub">${sub}</div>`:""}</div>`;
+function card(label,value,sub,extraClass){
+  return `<div class="card${extraClass?' '+extraClass:''}"><div class="ca"></div><div class="card-label">${label}</div><div class="card-value">${value}</div>${sub?`<div class="card-sub">${sub}</div>`:""}</div>`;
 }
 
 function goalHTML(){
@@ -224,56 +257,82 @@ function chartHTML(title,legend){
 
 function renderOverview(){
   const t=DATA.totals;
-  // Show Rate = showed up / on calendar
-  // Close Rate = closes / showed up
-  // AOV = cash / closes
-  const sr = t.calendar > 0 ? ((t.shows / t.calendar) * 100).toFixed(1) : null;
-  const cr = t.shows > 0 ? ((t.closes / t.shows) * 100).toFixed(1) : null;
-  const aov = t.closes > 0 ? Math.round(t.cash / t.closes) : null;
+  // All combined DM + Typeform
+  const sr  = t.calendar > 0 ? ((t.shows / t.calendar) * 100).toFixed(1) : null;
+  const cr  = t.shows > 0    ? ((t.closes / t.shows)   * 100).toFixed(1) : null;
+  const aov = t.closes > 0   ? Math.round(t.cash / t.closes) : null;
+  const totalQual = (t.dmQual||0) + (t.tfQual||0);
 
   return `<div class="content">
     ${goalHTML()}
     <div class="row">
-      ${card("Calls Booked (Qualified)",fmtN(t.qualified),"")}
+      ${card("Calls Booked (Qualified)",fmtN(totalQual),"")}
       ${card("Show Rate",sr!=null?sr+"%":"—","")}
       ${card("Close Rate",cr!=null?cr+"%":"—","")}
       ${card("Avg Order Value",aov!=null?fmt$(aov):"—","")}
     </div>
-    ${chartHTML("Performance Overview",`
+    ${chartHTML("Activity Breakdown",`
       <div class="li"><div class="ld" style="background:#F97316"></div>Cash</div>
       <div class="li"><div class="ld" style="background:#888"></div>Closes</div>
       <div class="li"><div class="ld" style="background:#444"></div>Shows</div>`)}
   </div>`;
 }
 
-function renderActivity(){
+// ── DMs TAB ───────────────────────────────────────────
+function renderDMs(){
   const t=DATA.totals;
-  const ctb=t.convos>0?((t.calls/t.convos)*100).toFixed(1):"0.0";
-  const ptb=t.pitched>0?((t.calls/t.pitched)*100).toFixed(1):"0.0";
-  const sr=t.calendar>0?((t.shows/t.calendar)*100).toFixed(1):null;
+  const ctb = t.convos>0 ? ((t.dmCalls/t.convos)*100).toFixed(1) : "0.0";
   return `<div class="content">
+    ${sl("Activity")}
+    <div class="row">
+      ${card("Cash Collected",fmt$(t.dmCash),"")}
+      ${card("Inbounds",fmtN(t.inbounds),"")}
+      ${card("Hours Worked",fmtN(t.hours),"")}
+    </div>
+    ${sl("Calls")}
+    <div class="row">
+      ${card("Calls Pitched",fmtN(t.dmPitched),"")}
+      ${card("Calls Booked",fmtN(t.dmCalls),"")}
+      ${card("Calls Booked (Qualified)",fmtN(t.dmQual),"")}
+      ${card("Convo to Book Rate",ctb+"%","")}
+    </div>
     ${sl("Outreach")}
     <div class="row">
       ${card("Outbounds",fmtN(t.outbounds),"")}
       ${card("Follow-Ups",fmtN(t.followups),"")}
       ${card("Conversations",fmtN(t.convos),"")}
     </div>
-    ${sl("Calls")}
-    <div class="row">
-      ${card("Calls Pitched",fmtN(t.pitched),"")}
-      ${card("Calls Booked",fmtN(t.calls),"")}
-      ${card("Calls Booked (Qualified)",fmtN(t.qualified),"")}
-    </div>
-    ${sl("Other")}
-    <div class="row">
-      ${card("Inbounds",fmtN(t.inbounds),"")}
-      ${card("Convo to Book Rate",ctb+"%","")}
-      ${card("Hours Worked",fmtN(t.hours),"")}
-    </div>
     ${chartHTML("Activity Breakdown",`
       <div class="li"><div class="ld" style="background:#F97316"></div>Outbounds</div>
       <div class="li"><div class="ld" style="background:#888"></div>Convos</div>
       <div class="li"><div class="ld" style="background:#444"></div>Pitched</div>`)}
+  </div>`;
+}
+
+// ── TYPEFORM TAB ──────────────────────────────────────
+function renderTypeform(){
+  const t=DATA.totals;
+  const sr  = t.tfCalendar>0 ? ((t.tfShows/t.tfCalendar)*100).toFixed(1) : null;
+  const cr  = t.tfShows>0   ? ((t.tfCloses/t.tfShows)*100).toFixed(1)   : null;
+  const aov = t.tfCloses>0  ? Math.round(t.tfCash/t.tfCloses) : null;
+
+  return `<div class="content">
+    ${sl("Activity")}
+    <div class="row">
+      ${card("Cash Collected",fmt$(t.tfCash),"")}
+      ${card("Avg Order Value",aov!=null?fmt$(aov):"—","")}
+      ${card("Close Rate",cr!=null?cr+"%":"—","")}
+    </div>
+    ${sl("Calls")}
+    <div class="row">
+      ${card("Calls Booked",fmtN(t.tfCalls),"")}
+      ${card("Calls Booked (Qualified)",fmtN(t.tfQual),"")}
+      ${card("Show Rate",sr!=null?sr+"%":"—","")}
+    </div>
+    ${chartHTML("Activity Breakdown",`
+      <div class="li"><div class="ld" style="background:#F97316"></div>Cash</div>
+      <div class="li"><div class="ld" style="background:#888"></div>Booked</div>
+      <div class="li"><div class="ld" style="background:#444"></div>Shows</div>`)}
   </div>`;
 }
 
@@ -308,12 +367,21 @@ function drawChart(){
       y:{...base.scales.y,position:"left",ticks:{...base.scales.y.ticks,callback:v=>"$"+v.toLocaleString()}},
       y2:{...base.scales.y,position:"right",grid:{display:false}}
     }}});
-  } else {
+  } else if(S.page==="dms"){
     chart=new Chart(canvas,{type:"line",data:{labels,datasets:[
       {label:"Outbounds",data:cd.map(r=>r.outbounds),borderColor:"#F97316",borderWidth:2,backgroundColor:"rgba(249,115,22,0.06)",fill:true,pointBackgroundColor:"#F97316",pointBorderWidth:0,pointStyle:"circle"},
-      {label:"Convos",data:cd.map(r=>r.convos),borderColor:"#888",borderWidth:1.5,pointBackgroundColor:"#888",pointBorderWidth:0,pointStyle:"circle"},
-      {label:"Pitched",data:cd.map(r=>r.pitched),borderColor:"#444",borderWidth:1.5,pointBackgroundColor:"#444",pointBorderWidth:0,pointStyle:"circle"},
+      {label:"Convos",data:cd.map(r=>r.dmConvos),borderColor:"#888",borderWidth:1.5,pointBackgroundColor:"#888",pointBorderWidth:0,pointStyle:"circle"},
+      {label:"Pitched",data:cd.map(r=>r.dmPitched),borderColor:"#444",borderWidth:1.5,pointBackgroundColor:"#444",pointBorderWidth:0,pointStyle:"circle"},
     ]},options:base});
+  } else if(S.page==="typeform"){
+    chart=new Chart(canvas,{type:"line",data:{labels,datasets:[
+      {label:"Cash",data:cd.map(r=>r.tfCash),borderColor:"#F97316",borderWidth:2,backgroundColor:"rgba(249,115,22,0.06)",fill:true,yAxisID:"y",pointBackgroundColor:"#F97316",pointBorderWidth:0,pointStyle:"circle"},
+      {label:"Booked",data:cd.map(r=>r.tfCalls),borderColor:"#888",borderWidth:1.5,yAxisID:"y2",pointBackgroundColor:"#888",pointBorderWidth:0,pointStyle:"circle"},
+      {label:"Shows",data:cd.map(r=>r.tfShows),borderColor:"#444",borderWidth:1.5,yAxisID:"y2",pointBackgroundColor:"#444",pointBorderWidth:0,pointStyle:"circle"},
+    ]},options:{...base,scales:{x:base.scales.x,
+      y:{...base.scales.y,position:"left",ticks:{...base.scales.y.ticks,callback:v=>"$"+v.toLocaleString()}},
+      y2:{...base.scales.y,position:"right",grid:{display:false}}
+    }}});
   }
 }
 
@@ -371,25 +439,21 @@ function pickerHTML(){
 var _pickerJustClicked = false;
 
 document.addEventListener("click",function(e){
-  // Toggle picker
   if(e.target.closest("[data-action='toggle-picker']")){
     e.preventDefault();e.stopPropagation();
     S.pickerOpen=!S.pickerOpen;
     if(S.pickerOpen){S.pickerSelecting="start";}
     render();return;
   }
-  // Prev month
   if(e.target.closest("[data-action='prev-month']")){
     e.preventDefault();e.stopPropagation();
     S.viewDate=addMonths(S.viewDate,-1);render();return;
   }
-  // Next month
   if(e.target.closest("[data-action='next-month']")){
     e.preventDefault();e.stopPropagation();
     if(addMonths(S.viewDate,1)<=TODAY){S.viewDate=addMonths(S.viewDate,1);render();}
     return;
   }
-  // Preset buttons
   var presetBtn=e.target.closest("[data-preset]");
   if(presetBtn){
     e.preventDefault();e.stopPropagation();
@@ -398,7 +462,6 @@ document.addEventListener("click",function(e){
     if(p){S.start=p.start;S.end=p.end;S.pickerOpen=false;S.pickerSelecting="start";render();}
     return;
   }
-  // Calendar day buttons
   var dayBtn=e.target.closest("[data-day]");
   if(dayBtn&&!dayBtn.disabled){
     e.preventDefault();e.stopPropagation();
@@ -421,15 +484,12 @@ document.addEventListener("click",function(e){
     }
     return;
   }
-  // Inside dropdown but not on a button
   if(e.target.closest("#picker-dropdown")){return;}
-  // Close picker when clicking outside
   if(S.pickerOpen&&!_pickerJustClicked){
     S.pickerOpen=false;S.pickerSelecting="start";render();
   }
 });
 
-// Hover: update visuals without full re-render
 document.addEventListener("mouseover",function(e){
   if(!S.pickerOpen||S.pickerSelecting!=="end")return;
   var dayBtn=e.target.closest("[data-day]");
@@ -462,7 +522,11 @@ document.addEventListener("mouseover",function(e){
 function render(){
   if(RAW.length) DATA=filterData(RAW);
   const cn=S.clientName||getClient()?.name||"Client";
-  const content=S.page==="overview"?renderOverview():renderActivity();
+  let content="";
+  if(S.page==="overview") content=renderOverview();
+  else if(S.page==="dms") content=renderDMs();
+  else if(S.page==="typeform") content=renderTypeform();
+
   document.getElementById("app").innerHTML=`
     <div class="header">
       <div>
@@ -477,7 +541,8 @@ function render(){
     </div>
     <div class="tabs">
       <button class="tab ${S.page==="overview"?"active":""}" onclick="setPage('overview')">Overview</button>
-      <button class="tab ${S.page==="activity"?"active":""}" onclick="setPage('activity')">Activity</button>
+      <button class="tab ${S.page==="dms"?"active":""}" onclick="setPage('dms')">DMs</button>
+      <button class="tab ${S.page==="typeform"?"active":""}" onclick="setPage('typeform')">Typeform</button>
     </div>
     ${content}`;
   setTimeout(drawChart,30);
@@ -486,7 +551,6 @@ function render(){
 
 function setPage(p){S.page=p;render();}
 
-// Goal editing with localStorage persistence
 function editGoal(){
   const v=prompt("New monthly target ($):",S.goal);
   if(v&&parseInt(v)>0){
@@ -503,7 +567,6 @@ function saveClient(){const i=document.getElementById("cin");if(i&&i.value.trim(
 function init(){
   const client=getClient();
   if(!client){document.getElementById("app").innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#333">Client not found</div>';return;}
-  // Load saved goal from localStorage, fall back to config default
   try{const g=localStorage.getItem("goal-"+client.slug);S.goal=g?parseInt(g):client.monthlyTarget;}catch(e){S.goal=client.monthlyTarget;}
   S.clientName=client.name;
   render();
