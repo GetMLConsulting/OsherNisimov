@@ -51,13 +51,11 @@ html,body{height:100%;overflow:hidden;background:#060606;font-family:-apple-syst
 .chart-inner{flex:1;position:relative;min-height:0}
 .delta-up{font-size:10px;font-weight:700;color:#22D3A5;background:rgba(34,211,165,0.1);border-radius:4px;padding:2px 5px}
 .delta-dn{font-size:10px;font-weight:700;color:#F43F5E;background:rgba(244,63,94,0.1);border-radius:4px;padding:2px 5px}
-/* Picker */
 .picker-btn{display:flex;align-items:center;gap:7px;background:#0d0d0d;border:1px solid #141414;border-radius:10px;padding:7px 12px;cursor:pointer;color:#F1F5F9;font-size:11px;font-weight:500;transition:all 0.15s}
 .picker-btn:hover{border-color:#1e1e1e}
 .picker-dropdown{position:absolute;right:0;top:calc(100% + 6px);background:#0a0a0a;border:1px solid #1e1e1e;border-radius:12px;padding:14px;z-index:999;display:flex;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,0.9)}
 .preset-btn{background:none;border:none;color:#888;text-align:left;padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;white-space:nowrap;width:100%}
 .preset-btn.active{background:#1e1e1e;color:#F97316;font-weight:700}
-
 </style>
 </head>
 <body>
@@ -131,6 +129,26 @@ function parseFormattedDate(str) {
   return isNaN(fallback) ? null : fallback;
 }
 
+// ── SAFE ROW GETTER — trims key whitespace ────────────
+function g(row, key) {
+  if (row[key] !== undefined) return parseFloat(row[key]) || 0;
+  // fallback: try trimmed version of all keys
+  const trimmed = key.trim();
+  for (const k of Object.keys(row)) {
+    if (k.trim() === trimmed) return parseFloat(row[k]) || 0;
+  }
+  return 0;
+}
+
+function getDate(row) {
+  // try exact key first, then trimmed match
+  if (row[dateKey] !== undefined) return row[dateKey];
+  for (const k of Object.keys(row)) {
+    if (k.trim() === dateKey.trim()) return row[k];
+  }
+  return null;
+}
+
 // ── CSV FILTERING ─────────────────────────────────────
 function filterData(rows){
   const s=S.start, e=S.end||S.start;
@@ -138,77 +156,71 @@ function filterData(rows){
   const e0=new Date(e.getFullYear(),e.getMonth(),e.getDate(),23,59,59);
 
   const f=rows.filter(r=>{
-    const dateStr = r[dateKey];
-    const d = parseFormattedDate(dateStr);
+    const raw = getDate(r);
+    const d = parseFormattedDate(raw);
     return d && d >= s0 && d <= e0;
   });
 
-  const g=k=>f.reduce((a,r)=>a+(parseFloat(r[k])||0),0);
+  const sum=k=>f.reduce((a,r)=>a+g(r,k),0);
 
   // ── DM columns
-  const dmCash     = g("Total DM Cash Collected (Today)");
-  const dmCalls    = g("DM Calls Booked");
-  const dmQual     = g("DM Qualified Calls Booked");
-  const dmCalendar = g("DM Calls On Calendar (Today)");
-  const dmShows    = g("DM Calls That Showed Up (Today)");
-  const dmCloses   = g("Total Amount Closed (DMs)");
-  const dmPitched  = g("DM Calls Pitched");
+  const dmCash     = sum("Total DM Cash Collected (Today)");
+  const dmCalls    = sum("DM Calls Booked");
+  const dmQual     = sum("DM Qualified Calls Booked");
+  const dmCalendar = sum("DM Calls On Calendar (Today)");
+  const dmShows    = sum("DM Calls That Showed Up (Today)");
+  const dmCloses   = sum("Total Amount Closed (DMs)");
+  const dmPitched  = sum("DM Calls Pitched");
 
   // ── Typeform columns
-  const tfCash     = g("Typeform Cash Collected");
-  const tfCalls    = g("Typeform Calls Booked (Today)");
-  const tfQual     = g("Typeform Qualified Calls Booked");
-  const tfCalendar = g("Typeform Calls On Calendar");
-  const tfShows    = g("Typeform Calls Showed Up");
-  const tfCloses   = g("Typeform Calls Closed");
+  const tfCash     = sum("Typeform Cash Collected");
+  const tfCalls    = sum("Typeform Calls Booked (Today)");
+  const tfQual     = sum("Typeform Qualified Calls Booked");
+  const tfCalendar = sum("Typeform Calls On Calendar");
+  const tfShows    = sum("Typeform Calls Showed Up");
+  const tfCloses   = sum("Typeform Calls Closed");
 
   const bd={};
   f.forEach(r=>{
-    const d = parseFormattedDate(r[dateKey]);
+    const raw = getDate(r);
+    const d = parseFormattedDate(raw);
     if(!d) return;
-    const sortKey = r[dateKey];
+    const sortKey = raw ? String(raw).trim() : "";
     const lbl=SM[d.getMonth()]+" "+d.getDate();
     if(!bd[sortKey])bd[sortKey]={sortKey:sortKey, label:lbl,
       cash:0, closes:0, shows:0,
       dmCash:0, dmCalls:0, dmShows:0, dmPitched:0, dmConvos:0, outbounds:0,
       tfCash:0, tfCalls:0, tfShows:0
     };
-    // combined for overview chart
-    bd[sortKey].cash    += (parseFloat(r["Total DM Cash Collected (Today)"])||0) + (parseFloat(r["Typeform Cash Collected"])||0);
-    bd[sortKey].closes  += (parseFloat(r["Total Amount Closed (DMs)"])||0)       + (parseFloat(r["Typeform Calls Closed"])||0);
-    bd[sortKey].shows   += (parseFloat(r["DM Calls That Showed Up (Today)"])||0) + (parseFloat(r["Typeform Calls Showed Up"])||0);
-    // DM chart
-    bd[sortKey].dmCash    += parseFloat(r["Total DM Cash Collected (Today)"])||0;
-    bd[sortKey].dmCalls   += parseFloat(r["DM Calls Booked"])||0;
-    bd[sortKey].dmShows   += parseFloat(r["DM Calls That Showed Up (Today)"])||0;
-    bd[sortKey].dmPitched += parseFloat(r["DM Calls Pitched"])||0;
-    bd[sortKey].outbounds += parseFloat(r["Outbound Messages Sent"])||0;
-    bd[sortKey].dmConvos  += parseFloat(r["Total Conversations Had"])||0;
-    // Typeform chart
-    bd[sortKey].tfCash    += parseFloat(r["Typeform Cash Collected"])||0;
-    bd[sortKey].tfCalls   += parseFloat(r["Typeform Calls Booked (Today)"])||0;
-    bd[sortKey].tfShows   += parseFloat(r["Typeform Calls Showed Up"])||0;
+    bd[sortKey].cash    += g(r,"Total DM Cash Collected (Today)") + g(r,"Typeform Cash Collected");
+    bd[sortKey].closes  += g(r,"Total Amount Closed (DMs)")       + g(r,"Typeform Calls Closed");
+    bd[sortKey].shows   += g(r,"DM Calls That Showed Up (Today)") + g(r,"Typeform Calls Showed Up");
+    bd[sortKey].dmCash    += g(r,"Total DM Cash Collected (Today)");
+    bd[sortKey].dmCalls   += g(r,"DM Calls Booked");
+    bd[sortKey].dmShows   += g(r,"DM Calls That Showed Up (Today)");
+    bd[sortKey].dmPitched += g(r,"DM Calls Pitched");
+    bd[sortKey].outbounds += g(r,"Outbound Messages Sent");
+    bd[sortKey].dmConvos  += g(r,"Total Conversations Had");
+    bd[sortKey].tfCash    += g(r,"Typeform Cash Collected");
+    bd[sortKey].tfCalls   += g(r,"Typeform Calls Booked (Today)");
+    bd[sortKey].tfShows   += g(r,"Typeform Calls Showed Up");
   });
 
   const chartData = Object.values(bd).sort((a,b) => a.sortKey.localeCompare(b.sortKey));
 
   return {
     totals:{
-      // combined (Overview)
       cash:     dmCash + tfCash,
       closes:   dmCloses + tfCloses,
       shows:    dmShows + tfShows,
       calendar: dmCalendar + tfCalendar,
-      // DM
       dmCash, dmCalls, dmQual, dmCalendar, dmShows, dmCloses, dmPitched,
-      // Typeform
       tfCash, tfCalls, tfQual, tfCalendar, tfShows, tfCloses,
-      // Activity (DM outreach)
-      outbounds:g("Outbound Messages Sent"),
-      convos:   g("Total Conversations Had"),
-      followups:g("Follow-Ups"),
-      hours:    g("Hours Worked"),
-      inbounds: g("Inbound Conversations"),
+      outbounds:sum("Outbound Messages Sent"),
+      convos:   sum("Total Conversations Had"),
+      followups:sum("Follow-Ups"),
+      hours:    sum("Hours Worked"),
+      inbounds: sum("Inbound Conversations"),
     },
     chartData: chartData
   };
@@ -257,7 +269,6 @@ function chartHTML(title,legend){
 
 function renderOverview(){
   const t=DATA.totals;
-  // All combined DM + Typeform
   const sr  = t.calendar > 0 ? ((t.shows / t.calendar) * 100).toFixed(1) : null;
   const cr  = t.shows > 0    ? ((t.closes / t.shows)   * 100).toFixed(1) : null;
   const aov = t.closes > 0   ? Math.round(t.cash / t.closes) : null;
@@ -278,7 +289,6 @@ function renderOverview(){
   </div>`;
 }
 
-// ── DMs TAB ───────────────────────────────────────────
 function renderDMs(){
   const t=DATA.totals;
   const ctb = t.convos>0 ? ((t.dmCalls/t.convos)*100).toFixed(1) : "0.0";
@@ -309,7 +319,6 @@ function renderDMs(){
   </div>`;
 }
 
-// ── TYPEFORM TAB ──────────────────────────────────────
 function renderTypeform(){
   const t=DATA.totals;
   const sr  = t.tfCalendar>0 ? ((t.tfShows/t.tfCalendar)*100).toFixed(1) : null;
@@ -571,7 +580,10 @@ function init(){
   S.clientName=client.name;
   render();
   Papa.parse(client.csvUrl,{
-    download:true,header:true,skipEmptyLines:true,
+    download:true,
+    header:true,
+    skipEmptyLines:true,
+    transformHeader: h => h.trim(),
     complete:r=>{RAW=r.data;DATA=filterData(RAW);render();},
     error:()=>{}
   });
